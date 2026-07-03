@@ -5,12 +5,12 @@
 
 // Arduino Mega 2560 pin map for a breadboarded AT28C256.
 // Data bit n uses DATA_PINS[n]. Address bit n uses ADDR_PINS[n].
-static const uint8_t DATA_PINS[8] = {22, 23, 24, 25, 26, 27, 28, 29};
-static const uint8_t ADDR_PINS[15] = {30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44};
+static const uint8_t DATA_PINS[8] = {43, 45, 47, 46, 44, 42, 40, 38};
+static const uint8_t ADDR_PINS[15] = {41, 39, 37, 35, 33, 31, 29, 27, 26, 28, 34, 30, 25, 24, 23};
 
-static const uint8_t PIN_CE = 45; // AT28C256 pin 20, active low
-static const uint8_t PIN_OE = 46; // AT28C256 pin 22, active low
-static const uint8_t PIN_WE = 47; // AT28C256 pin 27, active low
+static const uint8_t PIN_CE = 36; // AT28C256 pin 20, active low
+static const uint8_t PIN_OE = 32; // AT28C256 pin 22, active low
+static const uint8_t PIN_WE = 22; // AT28C256 pin 27, active low
 
 static const uint16_t EEPROM_SIZE = 32768;
 static const unsigned long WRITE_TIMEOUT_MS = 50;
@@ -400,6 +400,15 @@ void setup() {
 void loop() {
   while (Serial.available() > 0) {
     const char c = static_cast<char>(Serial.read());
+    
+    if(c == '\b' && lineLen != 0) {
+      line[lineLen--] = 0;
+      Serial.print("\b \b");
+      continue;
+    }
+
+    Serial.print(c);
+    
     if (c == '\r') {
       continue;
     }

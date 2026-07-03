@@ -136,6 +136,24 @@ If you do not know the port, try:
 pio device list
 ```
 
+## Programming Intel HEX files
+
+`scripts/eeprom_hex_tool.py` builds on `eeprom_tool.py` to write, read, and verify whole `.hex` images (standard Intel HEX format, e.g. from `avr-objcopy` or an assembler) instead of poking individual bytes.
+
+```bash
+# Write a hex file to the EEPROM (auto-verifies afterward unless --no-verify)
+python scripts/eeprom_hex_tool.py --port /dev/ttyACM0 write firmware.hex
+
+# Verify EEPROM contents against a hex file without writing
+python scripts/eeprom_hex_tool.py --port /dev/ttyACM0 verify firmware.hex
+
+# Read the whole EEPROM (or a range) out to a hex file
+python scripts/eeprom_hex_tool.py --port /dev/ttyACM0 read dump.hex
+python scripts/eeprom_hex_tool.py --port /dev/ttyACM0 read dump.hex --address 0x0000 --length 0x1000
+```
+
+Only the address ranges present in the hex file are written/verified; gaps are skipped on write and filled with `0xFF` when reading out to a new hex file. Transfers are chunked (`--chunk-size`, default 16 bytes) to stay within the firmware's serial input line length.
+
 ## Write behavior
 
 For each byte write, the firmware:
