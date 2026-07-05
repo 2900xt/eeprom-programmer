@@ -8,7 +8,7 @@
         {
             "name": "PlatformIO",
             "includePath": [
-                "/home/taha/Code/eeprom-programmer/src",
+                "/home/taha/Code/6502/eeprom-programmer/src",
                 "/home/taha/.platformio/packages/framework-arduino-avr/cores/arduino",
                 "/home/taha/.platformio/packages/framework-arduino-avr/variants/mega",
                 "/home/taha/.platformio/packages/framework-arduino-avr/libraries/EEPROM/src",
@@ -21,7 +21,7 @@
             "browse": {
                 "limitSymbolsToIncludedHeaders": true,
                 "path": [
-                    "/home/taha/Code/eeprom-programmer/src",
+                    "/home/taha/Code/6502/eeprom-programmer/src",
                     "/home/taha/.platformio/packages/framework-arduino-avr/cores/arduino",
                     "/home/taha/.platformio/packages/framework-arduino-avr/variants/mega",
                     "/home/taha/.platformio/packages/framework-arduino-avr/libraries/EEPROM/src",
