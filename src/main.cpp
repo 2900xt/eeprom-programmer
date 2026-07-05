@@ -149,7 +149,7 @@ static void printHex4(uint16_t value) {
 static void printHelp() {
   Serial.println(F("Commands:"));
   Serial.println(F("  ? | HELP                  Show this help"));
-  Serial.println(F("  S                         Status and pin map"));
+  Serial.println(F("  S                         Self-test (write/verify all pins)"));
   Serial.println(F("  R <addr> [len]            Read bytes, compact hex"));
   Serial.println(F("  D <addr> [len]            Hex dump bytes"));
   Serial.println(F("  W <addr> <byte> [...]     Write byte(s)"));
@@ -161,13 +161,100 @@ static void printHelp() {
   Serial.println(F("  V 0x0000 48 65 6C 6C 6F"));
 }
 
-static void printStatus() {
-  Serial.println(F("AT28C256 programmer status"));
-  Serial.println(F("EEPROM: 32768 bytes, address range 0x0000-0x7FFF"));
-  Serial.println(F("Data pins I/O0..I/O7: D22 D23 D24 D25 D26 D27 D28 D29"));
-  Serial.println(F("Address pins A0..A14: D30 D31 D32 D33 D34 D35 D36 D37 D38 D39 D40 D41 D42 D43 D44"));
-  Serial.println(F("Control: /CE=D45 /OE=D46 /WE=D47"));
-  Serial.println(F("OK"));
+// Write a byte, read it back, and report on mismatch. Relies on writeByte's
+// own read-back poll; on failure it prints what was written vs. what stuck.
+static bool writeCheck(uint16_t address, uint8_t value) {
+  if (writeByte(address, value)) {
+    return true;
+  }
+  const uint8_t got = readByte(address);
+  Serial.println();
+  Serial.print(F("  0x"));
+  printHex4(address);
+  Serial.print(F(" wrote 0x"));
+  printHex2(value);
+  Serial.print(F(" read 0x"));
+  printHex2(got);
+  Serial.println();
+  return false;
+}
+
+// Write/verify self-test. Exercises every data line high and low and every
+// address line, restoring the original EEPROM contents afterwards.
+static bool selfTest() {
+  Serial.println(F("SELFTEST AT28C256 (write/verify)"));
+
+  randomSeed((uint32_t)micros() ^ ((uint32_t)analogRead(A0) << 6) ^ analogRead(A1));
+
+  // 0x0000 plus each single-bit address isolates every address line.
+  // Distinct values across these cells make a stuck or shorted address
+  // line show up as aliasing when we read them back.
+  uint16_t addrs[16];
+  addrs[0] = 0x0000;
+  for (uint8_t b = 0; b < 15; ++b) {
+    addrs[b + 1] = (uint16_t)(1U << b);
+  }
+
+  // Preserve original contents so the test is non-destructive.
+  uint8_t saved[16];
+  for (uint8_t i = 0; i < 16; ++i) {
+    saved[i] = readByte(addrs[i]);
+  }
+
+  bool ok = true;
+
+  // --- Data lines: drive every I/O pin both high and low -------------
+  Serial.print(F("Data lines : "));
+  static const uint8_t patterns[] = {0x00, 0xFF, 0x55, 0xAA};
+  for (uint8_t i = 0; i < sizeof(patterns) && ok; ++i) {
+    ok = writeCheck(0x0000, patterns[i]);
+  }
+  for (uint8_t b = 0; b < 8 && ok; ++b) { // walking ones / walking zeros
+    ok = writeCheck(0x0000, (uint8_t)(1U << b))
+      && writeCheck(0x0000, (uint8_t)~(1U << b));
+  }
+  for (uint8_t i = 0; i < 16 && ok; ++i) { // random bytes
+    ok = writeCheck(0x0000, (uint8_t)random(256));
+  }
+  Serial.println(ok ? F("PASS") : F("FAIL"));
+
+  // --- Address lines: write all cells, then verify all ---------------
+  // Verifying only after every cell is written is what catches aliasing:
+  // a shorted address line lets a later write clobber an earlier cell.
+  if (ok) {
+    Serial.print(F("Addr lines : "));
+    uint8_t expect[16];
+    const uint8_t base = (uint8_t)random(256);
+    for (uint8_t i = 0; i < 16; ++i) {
+      expect[i] = (uint8_t)(base + i); // 16 unique values
+    }
+    for (uint8_t i = 0; i < 16 && ok; ++i) {
+      ok = writeCheck(addrs[i], expect[i]);
+    }
+    for (uint8_t i = 0; i < 16 && ok; ++i) {
+      const uint8_t got = readByte(addrs[i]);
+      if (got != expect[i]) {
+        Serial.println();
+        Serial.print(F("  stuck/shorted at 0x"));
+        printHex4(addrs[i]);
+        Serial.print(F(" expected 0x"));
+        printHex2(expect[i]);
+        Serial.print(F(" got 0x"));
+        printHex2(got);
+        Serial.println();
+        ok = false;
+      }
+    }
+    Serial.println(ok ? F("PASS") : F("FAIL"));
+  }
+
+  // --- Restore original contents -------------------------------------
+  for (uint8_t i = 0; i < 16; ++i) {
+    writeByte(addrs[i], saved[i]);
+  }
+
+  Serial.println(ok ? F("SELFTEST OK") : F("SELFTEST FAILED"));
+  return ok;
 }
 
 static char *nextToken(char **context) {
@@ -359,7 +446,7 @@ static void handleCommand(char *cmdLine) {
   if (strcmp(cmd, "?") == 0 || strcmp(cmd, "HELP") == 0) {
     printHelp();
   } else if (strcmp(cmd, "S") == 0 || strcmp(cmd, "STATUS") == 0) {
-    printStatus();
+    selfTest();
   } else if (strcmp(cmd, "R") == 0 || strcmp(cmd, "READ") == 0) {
     handleRead(context, false);
   } else if (strcmp(cmd, "D") == 0 || strcmp(cmd, "DUMP") == 0) {
@@ -394,14 +481,16 @@ void setup() {
   Serial.println();
   Serial.println(F("AT28C256 programmer ready"));
   Serial.println(F("Type ? for help."));
-  Serial.print(F("> "));
+  Serial.print(F(">"));
 }
 
 void loop() {
   while (Serial.available() > 0) {
     const char c = static_cast<char>(Serial.read());
     
-    if(c == '\b' && lineLen != 0) {
+    if(c == '\b') {
+      if(lineLen <= 0) continue;
+      
       line[lineLen--] = 0;
       Serial.print("\b \b");
       continue;
